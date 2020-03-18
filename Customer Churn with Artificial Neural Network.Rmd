@@ -1,0 +1,95 @@
+---
+title: "Predict Customer Churn with Artificial Neural Network Algorithm"
+output: github_document
+---
+
+
+
+We will use ANN algorithm to predict if the bank customer will stay at the bank or churn out.
+The dependent variable Exited has two values. 1 means exited, 0 means stays at the bank.
+
+
+```{r}
+# Importing the dataset
+dataset = read.csv('Churn_Modelling.csv')
+head(dataset)
+```
+
+We will choose the variables which can has an impact on dependent variable.
+```{r}
+dataset = dataset[4:14]
+head(dataset)
+```
+
+
+```{r}
+# Encoding the categorical variables as factors
+dataset$Geography = as.numeric(factor(dataset$Geography,
+                                      levels = c('France', 'Spain', 'Germany'),
+                                      labels = c(1, 2, 3)))
+dataset$Gender = as.numeric(factor(dataset$Gender,
+                                   levels = c('Female', 'Male'),
+                                   labels = c(1, 2)))
+str(dataset)
+```
+
+
+```{r}
+# Splitting the dataset into the Training set and Test set
+# install.packages('caTools')
+library(caTools)
+set.seed(123)
+split = sample.split(dataset$Exited, SplitRatio = 0.8)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+
+```{r}
+# Feature Scaling
+training_set[-11] = scale(training_set[-11]) # scale all variables except dependent variable
+test_set[-11] = scale(test_set[-11])
+```
+
+Fitting ANN to the Training set
+```{r}
+# install.packages('h2o')
+library(h2o)
+h2o.init(nthreads = -1) # allows you to connect specific server you need for ANN model
+model = h2o.deeplearning(y = 'Exited', # dependent variable
+                         training_frame = as.h2o(training_set), # convert training set to a H2O frame
+                         activation = 'Rectifier',
+                         hidden = c(5,5), # I choose 5 neural networks. Practically choose the half number of independent variables. We have 10 independent variables. So I choose 5 for it.
+                         epochs = 100,
+                         train_samples_per_iteration = -2) # -2 autotunes the model
+```
+## Note: Since we are connected to a server, building of this model will take shorter time than it takes in python. This is the advantage of H2O package.
+
+
+```{r}
+# Predicting the Test set results
+y_pred = h2o.predict(model, newdata = as.h2o(test_set[-11])) # predicts the probability of customer exited.
+y_pred = (y_pred > 0.5)  # if probability greater than 0.5 then customer exits. Otherwise stays at the bank.
+```
+## Note: If you predict a sensitive information like if the tumour is benign or malignent, you can take higher threshold value a higher number like  0.8 
+
+
+```{r}
+y_pred = as.vector(y_pred) # We convert daataset to vector as we need vector for implementing confusion matrix
+
+# Making the Confusion Matrix
+cm = table(test_set[, 11], y_pred)
+cm
+```
+
+
+```{r}
+Accuracy = (1535+203) / 2000
+# Note: We got an accuracy of 0.869 which is wonderfull. If we do k fold cross validation we can get better accuracy.
+```
+
+
+```{r}
+h2o.shutdown() # disconnects from server
+```
+
